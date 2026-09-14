@@ -16,6 +16,20 @@ process.on('unhandledRejection', (reason) => {
   console.error('[UNHANDLED REJECTION GUARD]:', reason);
 });
 
+// Suppress known annoying warnings from third-party plugins (mineflayer-pvp uses old physicTick event)
+const originalConsoleWarn = console.warn;
+console.warn = function (...args) {
+  if (
+    args.length > 0 &&
+    typeof args[0] === 'string' &&
+    args[0].includes('physicTick') &&
+    args[0].includes('deprecated')
+  ) {
+    return;
+  }
+  originalConsoleWarn.apply(console, args);
+};
+
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
