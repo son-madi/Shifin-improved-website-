@@ -77,8 +77,108 @@ export default function App() {
       containerBorder: 'border-sky-500/30 shadow-[0_0_20px_rgba(14,165,233,0.06)]',
     },
   };
-  const [bots, setBots] = useState<BotState[]>([]);
-  const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const token = localStorage.getItem('ninimo_token');
+      const cachedProfileRaw = localStorage.getItem('ninimo_user_profile');
+      if (token && cachedProfileRaw) {
+        return JSON.parse(cachedProfileRaw);
+      }
+    } catch {}
+    return null;
+  });
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(() => {
+    try {
+      const token = localStorage.getItem('ninimo_token');
+      return !!token;
+    } catch {
+      return false;
+    }
+  });
+  const [isBotsLoading, setIsBotsLoading] = useState<boolean>(() => {
+    try {
+      const token = localStorage.getItem('ninimo_token');
+      const cachedProfileRaw = localStorage.getItem('ninimo_user_profile');
+      if (token && cachedProfileRaw) {
+        const user = JSON.parse(cachedProfileRaw);
+        if (user?.id) {
+          const cached = localStorage.getItem(`ninimo_bots_state_${user.id}`) || localStorage.getItem(`ninimo_bots_${user.id}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+    } catch {}
+    return false;
+  });
+  const [bots, setBots] = useState<BotState[]>(() => {
+    try {
+      const token = localStorage.getItem('ninimo_token');
+      const cachedProfileRaw = localStorage.getItem('ninimo_user_profile');
+      if (token && cachedProfileRaw) {
+        const user = JSON.parse(cachedProfileRaw);
+        if (user?.id) {
+          const cachedState = localStorage.getItem(`ninimo_bots_state_${user.id}`);
+          if (cachedState) {
+            const parsed = JSON.parse(cachedState);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return parsed;
+            }
+          }
+          const cachedConfigs = localStorage.getItem(`ninimo_bots_${user.id}`);
+          if (cachedConfigs) {
+            const parsed = JSON.parse(cachedConfigs);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return parsed.map((cfg: BotConfig) => ({
+                id: cfg.id || `bot-${Date.now()}`,
+                userId: user.id,
+                config: cfg,
+                status: 'offline' as const,
+                health: 20,
+                food: 20,
+                saturation: 5,
+                oxygen: 20,
+                position: { x: 0, y: 64, z: 0, dimension: 'overworld' },
+                experience: { level: 0, points: 0, progress: 0 },
+                inventory: [],
+                recentLogs: [],
+                nearbyEntities: [],
+                playersNearby: [],
+                chatHistory: [],
+                uptimeSeconds: 0,
+                lastSpawnTimestamp: 0,
+                isViewerStreaming: false,
+              }));
+            }
+          }
+        }
+      }
+    } catch {}
+    return [];
+  });
+  const [selectedBotId, setSelectedBotId] = useState<string | null>(() => {
+    try {
+      const token = localStorage.getItem('ninimo_token');
+      const cachedProfileRaw = localStorage.getItem('ninimo_user_profile');
+      if (token && cachedProfileRaw) {
+        const user = JSON.parse(cachedProfileRaw);
+        if (user?.id) {
+          const cached = localStorage.getItem(`ninimo_bots_state_${user.id}`) || localStorage.getItem(`ninimo_bots_${user.id}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return parsed[0].id || parsed[0].config?.id || null;
+            }
+          }
+        }
+      }
+    } catch {}
+    return null;
+  });
   const [stats, setStats] = useState<GlobalStats>({
     totalBots: 0,
     activeBots: 0,
@@ -91,8 +191,6 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('signup');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [editingBot, setEditingBot] = useState<BotState | null>(null);
   const [activeTab, setActiveTab] = useState<'hud_chat' | 'anti_afk' | 'settings'>('hud_chat');
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
@@ -140,21 +238,49 @@ export default function App() {
     return fetch(url, { ...options, headers });
   }, []);
 
+  // Backup bot configs in browser storage per user so data is never lost across container restarts
+  const saveBotsToLocalStorage = useCallback((userId: string, currentBots: BotState[]) => {
+    try {
+      if (!userId || currentBots.length === 0) return;
+      const configsToSave = currentBots.map((b) => b.config);
+      localStorage.setItem(`ninimo_bots_${userId}`, JSON.stringify(configsToSave));
+      localStorage.setItem(`ninimo_bots_state_${userId}`, JSON.stringify(currentBots));
+    } catch {}
+  }, []);
+
+  const getBotsFromLocalStorage = useCallback((userId: string): BotConfig[] => {
+    try {
+      if (!userId) return [];
+      const raw = localStorage.getItem(`ninimo_bots_${userId}`);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
   const refreshBots = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      setIsBotsLoading(false);
+      return;
+    }
     try {
       const res = await authFetch('/api/bots');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.bots)) {
           setBots(data.bots);
+          saveBotsToLocalStorage(currentUser.id, data.bots);
           if (data.bots.length > 0 && !selectedBotId) {
             setSelectedBotId(data.bots[0].id);
           }
         }
       }
-    } catch {}
-  }, [currentUser, authFetch, selectedBotId]);
+    } catch {} finally {
+      setIsBotsLoading(false);
+    }
+  }, [currentUser, authFetch, selectedBotId, saveBotsToLocalStorage]);
 
   // Check existing auth, global settings, and load public platform metrics on load
   useEffect(() => {
@@ -289,27 +415,6 @@ export default function App() {
     }
   };
 
-  // Backup bot configs in browser storage per user so data is never lost across container restarts
-  const saveBotsToLocalStorage = useCallback((userId: string, currentBots: BotState[]) => {
-    try {
-      if (!userId || currentBots.length === 0) return;
-      const configsToSave = currentBots.map((b) => b.config);
-      localStorage.setItem(`ninimo_bots_${userId}`, JSON.stringify(configsToSave));
-    } catch {}
-  }, []);
-
-  const getBotsFromLocalStorage = useCallback((userId: string): BotConfig[] => {
-    try {
-      if (!userId) return [];
-      const raw = localStorage.getItem(`ninimo_bots_${userId}`);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }, []);
-
   // Fetch current user's bots strictly isolated by user
   const fetchBots = useCallback(async (explicitUser?: User) => {
     const activeUser = explicitUser || currentUser;
@@ -317,6 +422,7 @@ export default function App() {
     if (!token || !activeUser) {
       setBots([]);
       setSelectedBotId(null);
+      setIsBotsLoading(false);
       return;
     }
 
@@ -343,6 +449,7 @@ export default function App() {
       } else if (res.status === 401) {
         // Token invalid/expired
         localStorage.removeItem('ninimo_token');
+        localStorage.removeItem('ninimo_user_profile');
         setCurrentUser(null);
         setBots([]);
         setSelectedBotId(null);
@@ -355,6 +462,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to fetch user state:', err);
+    } finally {
+      setIsBotsLoading(false);
     }
   }, [authFetch, currentUser, saveBotsToLocalStorage]);
 
@@ -589,6 +698,7 @@ export default function App() {
     setCurrentUser(null);
     setBots([]);
     setSelectedBotId(null);
+    setIsBotsLoading(false);
     setIsStreamConnected(false);
     showToast('Signed out. Your private bot configurations are saved.');
   };
@@ -911,16 +1021,21 @@ export default function App() {
         </AnimatePresence>
 
         {/* Authenticated View vs Guest Security Gateway with Live Bot Profiles & Online Counter */}
-        {!currentUser && !isAuthChecking ? (
+        {!currentUser ? (
           <div className="py-1 sm:py-2">
             <LivePlatformCounter
               publicStats={publicStats}
               onSignUp={() => openAuth('signup')}
               onSignIn={() => openAuth('login')}
-              onAuthSuccess={(user, _token) => {
+              onAuthSuccess={(user, token) => {
                 setCurrentUser(user);
+                try {
+                  localStorage.setItem('ninimo_token', token);
+                  localStorage.setItem('ninimo_user_profile', JSON.stringify(user));
+                } catch {}
+                setIsBotsLoading(true);
                 showToast(`Welcome, ${user.username}!`);
-                refreshBots();
+                fetchBots(user);
               }}
             />
           </div>
@@ -931,6 +1046,11 @@ export default function App() {
             onImpersonate={handleImpersonate}
             authFetch={authFetch}
           />
+        ) : isBotsLoading && bots.length === 0 ? (
+          <div className="space-y-4 py-6 animate-pulse">
+            <div className={`h-16 rounded-2xl border ${isColourUI ? 'bg-slate-900/40 border-slate-800' : isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-zinc-100 border-zinc-200'}`} />
+            <div className={`h-80 rounded-3xl border ${isColourUI ? 'bg-slate-900/40 border-slate-800' : isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-zinc-100 border-zinc-200'}`} />
+          </div>
         ) : (
           <>
             {/* Impersonation Indicator Banner */}
@@ -1323,6 +1443,8 @@ export default function App() {
               setCurrentUser(user);
               setIsAuthModalOpen(false);
               showToast(`Welcome to Ninimo, ${user.username}!`);
+              setIsBotsLoading(true);
+              fetchBots(user);
             }}
           />
         )}
