@@ -14,6 +14,7 @@ interface BotListProps {
   bots: BotState[];
   selectedBotId: string | null;
   globalBotLimit?: number;
+  isAdmin?: boolean;
   onSelectBot: (id: string) => void;
   onStartBot: (id: string) => void;
   onStopBot: (id: string) => void;
@@ -24,6 +25,7 @@ export const BotList: React.FC<BotListProps> = ({
   bots,
   selectedBotId,
   globalBotLimit = 1,
+  isAdmin = false,
   onSelectBot,
   onStartBot,
   onStopBot,
@@ -38,9 +40,9 @@ export const BotList: React.FC<BotListProps> = ({
           isColourUI ? 'text-indigo-300' : isDark ? 'text-zinc-300' : 'text-zinc-700'
         }`}>
           <Users className={`w-3.5 h-3.5 ${isColourUI ? 'text-indigo-400' : 'text-zinc-400'}`} />
-          <span>Active Bot Fleet ({bots.length}/{globalBotLimit} Bots)</span>
+          <span>Active Bot Fleet {isAdmin ? `(${bots.length} Bots • Unlimited)` : `(${bots.length}/${globalBotLimit} Bots)`}</span>
         </div>
-        {bots.length >= globalBotLimit ? (
+        {!isAdmin && bots.length >= globalBotLimit ? (
           <span className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border flex items-center gap-1.5 shadow-sm ${
             isColourUI
               ? 'text-purple-300 bg-purple-950/40 border-purple-500/30'
@@ -61,7 +63,7 @@ export const BotList: React.FC<BotListProps> = ({
             }`}
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>New Bot ({bots.length}/{globalBotLimit})</span>
+            <span>New Bot {isAdmin ? `(${bots.length})` : `(${bots.length}/${globalBotLimit})`}</span>
           </motion.button>
         )}
       </div>

@@ -302,33 +302,6 @@ class AuthManager {
       }
     }
 
-    // Strict Anti-Cheese: Multi-Account Restriction per Device & IP
-    if (!isShifinAdmin) {
-      // 1. Check Device Fingerprint
-      if (deviceFingerprint && deviceFingerprint.length > 5) {
-        const existingWithDevice = Array.from(this.users.values()).find(
-          (u) => !u.isAdmin && u.deviceFingerprint === deviceFingerprint
-        );
-        if (existingWithDevice) {
-          throw new Error(
-            `Security Notice: An account ("${existingWithDevice.username}") is already registered from this device/browser. Multiple accounts are restricted to prevent bot limit bypassing.`
-          );
-        }
-      }
-
-      // 2. Check IP Address (if valid external IP)
-      if (clientIp && clientIp !== 'unknown' && !clientIp.startsWith('127.') && clientIp !== '::1') {
-        const existingWithIp = Array.from(this.users.values()).filter(
-          (u) => !u.isAdmin && u.registrationIp === clientIp
-        );
-        if (existingWithIp.length >= 1) {
-          throw new Error(
-            'Security Notice: An account is already registered on this network/IP. Bypassing bot limits through multiple accounts is prohibited.'
-          );
-        }
-      }
-    }
-
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = this.hashPassword(password, salt);
     const id = `user-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -581,6 +554,15 @@ class AuthManager {
     }
     
     return true;
+  }
+
+  public getUser(userId: string): User | undefined {
+    return this.users.get(userId);
+  }
+
+  public isUserAdmin(userId: string): boolean {
+    const user = this.users.get(userId);
+    return !!user?.isAdmin || user?.username?.toLowerCase() === 'shifin';
   }
 }
 

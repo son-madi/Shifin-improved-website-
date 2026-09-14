@@ -28,6 +28,7 @@ import {
   Server,
   Layers,
   Filter,
+  UserPlus,
 } from 'lucide-react';
 import { AdminAccountInfo, User } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -69,6 +70,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [resetModalUser, setResetModalUser] = useState<AdminAccountInfo | null>(null);
   const [resetNewPassword, setResetNewPassword] = useState('');
+
+  // Admin Account Creation State
+  const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
+  const [createUsername, setCreateUsername] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
 
   // Ping Tool State
   const [pingHost, setPingHost] = useState('');
@@ -257,6 +264,40 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       notifySuccess(`Password updated successfully!`);
       setResetModalUser(null);
       setResetNewPassword('');
+      await fetchAdminData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createUsername.trim() || !createEmail.trim() || !createPassword.trim()) {
+      setError('Username, email, and password are required.');
+      return;
+    }
+    setActionLoading('create_account');
+    setError(null);
+    try {
+      const res = await authFetch('/api/admin/accounts/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: createUsername.trim(),
+          email: createEmail.trim(),
+          password: createPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create user account');
+
+      notifySuccess(`User account "${data.user.username}" created successfully!`);
+      setShowCreateAccountModal(false);
+      setCreateUsername('');
+      setCreateEmail('');
+      setCreatePassword('');
       await fetchAdminData();
     } catch (err: any) {
       setError(err.message);
@@ -679,8 +720,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 />
               </div>
 
-              {/* Filter Pills */}
-              <div className="flex items-center gap-1.5 self-end sm:self-auto overflow-x-auto w-full sm:w-auto">
+              {/* Filter Pills & Create Account Action */}
+              <div className="flex items-center gap-2 self-end sm:self-auto overflow-x-auto w-full sm:w-auto">
                 <Filter className="w-3.5 h-3.5 text-zinc-400 shrink-0 mr-1" />
                 <button
                   onClick={() => setFilterRole('all')}
@@ -711,6 +752,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   }`}
                 >
                   Has Active Bots ({accounts.filter(a => a.bots.some(b => b.status === 'online')).length})
+                </button>
+
+                <button
+                  onClick={() => setShowCreateAccountModal(true)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ml-1 shadow-sm ${
+                    isGreen
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-zinc-950 border border-emerald-400'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500'
+                  }`}
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>New Account</span>
                 </button>
               </div>
             </div>
@@ -1075,14 +1128,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   <Sliders className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold">Global Bot Limit Cap</h3>
-                  <p className="text-xs text-zinc-400">Configure maximum bot instances permitted per user account.</p>
+                  <h3 className="text-sm font-bold">Global Active Bot Limit Quota</h3>
+                  <p className="text-xs text-zinc-400">Configure total active bots a user can run across their accounts.</p>
                 </div>
               </div>
 
               <form onSubmit={handleUpdateLimit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-zinc-300">Max Bots Per User</label>
+                  <label className="block text-xs font-semibold mb-1 text-zinc-300">Max Active Running Bots Per User Quota</label>
                   <div className="flex items-center gap-3">
                     <input
                       type="number"
@@ -1097,13 +1150,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       disabled={actionLoading === 'limit'}
                       className="px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-zinc-950 border border-amber-400 shadow-md transition-all active:scale-95 cursor-pointer"
                     >
-                      {actionLoading === 'limit' ? 'Updating...' : 'Apply Cap'}
+                      {actionLoading === 'limit' ? 'Updating...' : 'Apply Quota'}
                     </button>
                   </div>
                 </div>
-                <p className="text-xs text-zinc-500 leading-relaxed">
-                  Updating this parameter instantly broadcasts the new policy to all clients and enforces limits on bot creations.
-                </p>
+                <div className="text-xs text-zinc-500 leading-relaxed space-y-1 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/50">
+                  <p className="font-semibold text-zinc-400">Quota Pooling Rules:</p>
+                  <p>• Users can create multiple accounts and flexibly distribute their active bots (e.g., if set to 2: run 1 bot in Account A and 1 bot in Account B, or 2 bots in Account A; if set to 5: run 1 bot across 5 accounts, 5 bots on 1 account, or any combination).</p>
+                  <p>• <strong>Admin accounts</strong> have unrestricted access (unlimited account creations and unlimited running bots).</p>
+                </div>
               </form>
             </div>
 
@@ -1289,6 +1344,101 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>{actionLoading === `pwd-${resetModalUser.id}` ? 'Saving...' : 'Save Password'}</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Create Account Modal */}
+      <AnimatePresence>
+        {showCreateAccountModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className={`w-full max-w-md p-6 rounded-3xl border shadow-2xl ${
+                isGreen 
+                  ? 'bg-[#0a1420] border-emerald-800 text-emerald-100' 
+                  : isDark 
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-100' 
+                  : 'bg-white border-slate-300 text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-3 pb-4 border-b border-zinc-800">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Create User Account</h3>
+                  <p className="text-xs text-zinc-400">Admin direct provisioning (Unlimited)</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateAccount} className="mt-4 space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-zinc-300">Username</label>
+                  <input
+                    type="text"
+                    required
+                    minLength={3}
+                    placeholder="e.g. PlayerTwo"
+                    value={createUsername}
+                    onChange={(e) => setCreateUsername(e.target.value)}
+                    className={`w-full px-4 py-2 text-xs rounded-xl border focus:outline-none ${getInputBg()}`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-zinc-300">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. player2@example.com"
+                    value={createEmail}
+                    onChange={(e) => setCreateEmail(e.target.value)}
+                    className={`w-full px-4 py-2 text-xs rounded-xl border focus:outline-none ${getInputBg()}`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-zinc-300">Password</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    placeholder="Account password (min 6 chars)"
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                    className={`w-full px-4 py-2 text-xs rounded-xl border focus:outline-none ${getInputBg()}`}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateAccountModal(false);
+                      setCreateUsername('');
+                      setCreateEmail('');
+                      setCreatePassword('');
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                      isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading === 'create_account'}
+                    className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>{actionLoading === 'create_account' ? 'Creating...' : 'Create Account'}</span>
                   </button>
                 </div>
               </form>

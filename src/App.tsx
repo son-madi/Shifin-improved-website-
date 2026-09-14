@@ -713,13 +713,16 @@ export default function App() {
 
   // Bot actions
   const handleStartBot = async (id: string) => {
-    const runningBots = bots.filter(
-      (b) => b.id !== id && (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
-    );
+    const isPrivileged = currentUser?.isAdmin || currentUser?.isTester || currentUser?.username?.toUpperCase() === 'TESTER';
+    if (!isPrivileged) {
+      const runningBots = bots.filter(
+        (b) => b.id !== id && (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
+      );
 
-    if (runningBots.length >= globalBotLimit) {
-      showToast(`Active limit reached (${globalBotLimit} max): Please stop your running bot before activating this one!`);
-      return;
+      if (runningBots.length >= globalBotLimit) {
+        showToast(`Active limit reached (${globalBotLimit} max): Please stop a running bot before activating this one!`);
+        return;
+      }
     }
 
     try {
@@ -728,7 +731,7 @@ export default function App() {
         showToast('Connecting bot to Minecraft server...');
       } else {
         const err = await res.json().catch(() => ({}));
-        showToast(err.error || `Active limit: Only ${globalBotLimit} active bot(s) allowed. Stop your other bot first!`);
+        showToast(err.error || `Active limit: Only ${globalBotLimit} active bot(s) allowed across your accounts. Stop another running bot first!`);
       }
     } catch {
       showToast('Error connecting bot');
@@ -910,8 +913,9 @@ export default function App() {
         showToast('Failed to update bot');
       }
     } else {
-      if (bots.length >= globalBotLimit) {
-        showToast(`Limit reached: ${globalBotLimit} bot(s) per account. Edit your active bot settings.`);
+      const isPrivileged = currentUser?.isAdmin || currentUser?.isTester || currentUser?.username?.toUpperCase() === 'TESTER';
+      if (!isPrivileged && bots.length >= globalBotLimit) {
+        showToast(`Limit reached: ${globalBotLimit} bot(s) per account profile. Edit your active bot or switch accounts.`);
         return;
       }
       const res = await authFetch('/api/bots', {
@@ -975,8 +979,9 @@ export default function App() {
             openAuth('login');
             return;
           }
-          if (bots.length >= globalBotLimit) {
-            showToast(`Limit reached: Maximum ${globalBotLimit} bot(s) allowed per account. Edit your active bot to change settings.`);
+          const isPrivileged = currentUser?.isAdmin || currentUser?.isTester || currentUser?.username?.toUpperCase() === 'TESTER';
+          if (!isPrivileged && bots.length >= globalBotLimit) {
+            showToast(`Limit reached: Maximum ${globalBotLimit} bot(s) allowed per account. Edit your active bot or switch accounts.`);
             return;
           }
           setEditingBot(null);
@@ -1086,14 +1091,16 @@ export default function App() {
               bots={bots}
               selectedBotId={activeBot?.id || null}
               globalBotLimit={globalBotLimit}
+              isAdmin={!!(currentUser?.isAdmin || currentUser?.isTester || currentUser?.username?.toUpperCase() === 'TESTER')}
               onSelectBot={(id) => {
                 setSelectedBotId(id);
               }}
               onStartBot={handleStartBot}
               onStopBot={handleStopBot}
               onAddNewBot={() => {
-                if (bots.length >= globalBotLimit) {
-                  showToast(`Limit: Maximum ${globalBotLimit} bot(s) allowed per account. Edit your active bot to modify settings.`);
+                const isPrivileged = currentUser?.isAdmin || currentUser?.isTester || currentUser?.username?.toUpperCase() === 'TESTER';
+                if (!isPrivileged && bots.length >= globalBotLimit) {
+                  showToast(`Limit: Maximum ${globalBotLimit} bot(s) allowed per account.`);
                   return;
                 }
                 setEditingBot(null);

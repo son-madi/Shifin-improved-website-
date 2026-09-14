@@ -400,6 +400,25 @@ async function startServer() {
     });
   });
 
+  // Admin: Create a new user account directly
+  app.post('/api/admin/accounts/create', requireAdmin, (req, res) => {
+    try {
+      const { username, email, password } = req.body;
+      if (!username || !email || !password) {
+        return res.status(400).json({ error: 'Username, email, and password are required' });
+      }
+      const clientIp = getClientIp(req);
+      const deviceId = getDeviceId(req);
+      const result = authManager.createUser(username, email, password, clientIp, deviceId);
+      // Ensure user has default bot profile initialized
+      botManager.getUserBots(result.user.id, deviceId, clientIp, result.user.isAdmin);
+      botManager.broadcastPublicStats();
+      res.status(201).json({ success: true, user: result.user });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Failed to create account' });
+    }
+  });
+
   // Admin: Directly update/set password for any user account
   app.post('/api/admin/accounts/:id/password', requireAdmin, (req, res) => {
     try {

@@ -3,6 +3,7 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import { BotConfig, BotState, GlobalStats, PublicPlatformStats } from '../src/types.js';
 import { BotInstance } from './botInstance.js';
+import { authManager } from './auth.js';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 if (!fs.existsSync(DATA_DIR)) {
@@ -94,10 +95,13 @@ export class BotManager extends EventEmitter {
     this.systemSettings.globalBotLimit = safeLimit;
     this.saveSettings();
 
-    // Enforce active bot limits across all users and broadcast
+    // Enforce active bot limits across all non-admin users and broadcast
     const botsByUser = new Map<string, BotInstance[]>();
     for (const bot of this.bots.values()) {
       if (!bot.config.userId) continue;
+      // Admin bots are completely exempt from global limit restrictions
+      if (authManager.isUserAdmin(bot.config.userId)) continue;
+
       if (!botsByUser.has(bot.config.userId)) {
         botsByUser.set(bot.config.userId, []);
       }
@@ -362,26 +366,10 @@ export class BotManager extends EventEmitter {
     const limit = this.getGlobalBotLimit();
 
     if (!isPrivileged) {
-      // 1. Bot Limit per User Account
+      // Bot Profile Limit per User Account
       const existingUserBots = Array.from(this.bots.values()).filter(b => b.config.userId === userId);
       if (existingUserBots.length >= limit) {
-        throw new Error(`Limit reached: Current limit is ${limit} bot${limit > 1 ? 's' : ''} per account. Edit or delete your existing bot.`);
-      }
-
-      // 2. Bot Limit per Browser/Device Fingerprint
-      if (deviceId) {
-        const existingDeviceBots = Array.from(this.bots.values()).filter(b => b.config.deviceId === deviceId);
-        if (existingDeviceBots.length >= limit) {
-          throw new Error(`Device limit reached: Only ${limit} bot${limit > 1 ? 's' : ''} allowed per browser/device.`);
-        }
-      }
-
-      // 3. Bot Limit per Network IP
-      if (clientIp && clientIp !== 'unknown' && !clientIp.startsWith('127.') && clientIp !== '::1') {
-        const existingIpBots = Array.from(this.bots.values()).filter(b => b.config.clientIp === clientIp);
-        if (existingIpBots.length >= limit) {
-          throw new Error(`Network limit reached: Only ${limit} bot${limit > 1 ? 's' : ''} allowed per network connection.`);
-        }
+        throw new Error(`Account bot limit reached: Current limit is ${limit} bot${limit > 1 ? 's' : ''} per account profile.`);
       }
     }
 
@@ -468,31 +456,39 @@ export class BotManager extends EventEmitter {
 
       // 1. Check account active concurrency
       const activeUserBots = Array.from(this.bots.values()).filter(
-        b => b.config.userId === userId && b.config.id !== botId && (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
+        b => b.config.userId === userId &&
+             b.config.id !== botId &&
+             (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
       );
       if (activeUserBots.length >= limit) {
-        throw new Error(`Active bot limit reached (${limit} max active bot${limit > 1 ? 's' : ''}). Please stop your running bot before activating this one.`);
+        throw new Error(`Active bot limit reached: Current limit is ${limit} running bot${limit > 1 ? 's' : ''} for your account. Please stop a running bot first.`);
       }
 
-      // 2. Check Device active concurrency (blocks different accounts on same browser/device)
+      // 2. Check Device active concurrency across ALL accounts on this browser/device (excluding admin bots)
       const targetDeviceId = deviceId || bot.config.deviceId;
-      if (targetDeviceId) {
+      if (targetDeviceId && targetDeviceId.length > 5) {
         const activeDeviceBots = Array.from(this.bots.values()).filter(
-          b => b.config.deviceId === targetDeviceId && b.config.id !== botId && (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
+          b => b.config.deviceId === targetDeviceId &&
+               b.config.id !== botId &&
+               !authManager.isUserAdmin(b.config.userId) &&
+               (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
         );
         if (activeDeviceBots.length >= limit) {
-          throw new Error(`Device protection: An active bot is already running from this device (${limit} max). Stop it before starting another.`);
+          throw new Error(`Shared bot limit reached: You are running ${limit} active bot${limit > 1 ? 's' : ''} across your accounts on this device. Stop a running bot in one of your accounts to activate this one.`);
         }
       }
 
-      // 3. Check Network IP active concurrency (blocks different accounts/incognito on same IP network)
+      // 3. Check Network IP active concurrency across ALL accounts on this IP network (excluding admin bots)
       const targetIp = clientIp || bot.config.clientIp;
       if (targetIp && targetIp !== 'unknown' && !targetIp.startsWith('127.') && targetIp !== '::1') {
         const activeIpBots = Array.from(this.bots.values()).filter(
-          b => b.config.clientIp === targetIp && b.config.id !== botId && (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
+          b => b.config.clientIp === targetIp &&
+               b.config.id !== botId &&
+               !authManager.isUserAdmin(b.config.userId) &&
+               (b.status === 'online' || b.status === 'reconnecting' || b.status === 'starting')
         );
         if (activeIpBots.length >= limit) {
-          throw new Error(`Network protection: An active bot is already running on this network/IP (${limit} max). Bypassing limits across multiple accounts is not permitted.`);
+          throw new Error(`Network bot limit reached: You are running ${limit} active bot${limit > 1 ? 's' : ''} across accounts on this network/IP. Stop a running bot on your other account to activate this one.`);
         }
       }
     }
