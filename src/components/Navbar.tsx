@@ -273,27 +273,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Slide Drawer (Side Sheet) with Physics Springs & Staggered Transitions */}
+      {/* Slide Drawer (Side Sheet) with Optimized Performance & Non-Glitch Viewport for Firefox/Lemur */}
       <AnimatePresence>
         {isDrawerOpen && (
           <div className="fixed inset-0 z-50 flex justify-end">
-            {/* Backdrop Overlay with Smooth Blur Transition */}
+            {/* Backdrop Overlay - Solid High Contrast on Mobile for High FPS, Blur on Desktop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.24, ease: 'easeInOut' }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
               onClick={closeDrawer}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/75 sm:bg-black/60 sm:backdrop-blur-sm"
             />
 
-            {/* Drawer Content Panel with Refined Spring Physics */}
+            {/* Drawer Content Panel - Locked to 100dvh with Hardware Accelerated Smooth Slide */}
             <motion.div
-              initial={{ x: '100%', opacity: 0.6 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: '100%', opacity: 0.6 }}
-              transition={{ type: 'spring', damping: 27, stiffness: 290, mass: 0.7 }}
-              className={`relative z-10 w-full max-w-sm h-full flex flex-col shadow-2xl border-l transition-colors overflow-y-auto transform-gpu will-change-transform ${
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className={`relative z-10 w-full max-w-sm h-[100dvh] max-h-[100dvh] flex flex-col shadow-2xl border-l transition-colors overflow-hidden ${
                 isColourUI
                   ? 'bg-[#090e1f] border-indigo-500/30 text-slate-100 shadow-[0_0_50px_rgba(99,102,241,0.25)]'
                   : isDark
@@ -303,7 +303,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               {/* Drawer Header */}
               <div
-                className={`flex items-center justify-between p-4 border-b ${
+                className={`flex items-center justify-between p-4 border-b shrink-0 ${
                   isColourUI
                     ? 'border-indigo-500/20 bg-[#090e1f]/90'
                     : isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-zinc-200 bg-zinc-50'
@@ -337,8 +337,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </motion.button>
               </div>
 
-              {/* Drawer Body with Staggered Elements */}
-              <div className="p-4 flex-1 space-y-4">
+              {/* Drawer Body with Hardware-Accelerated Isolated Scroll Container */}
+              <div className="p-4 flex-1 space-y-4 overflow-y-auto overscroll-contain touch-pan-y">
                 {/* Account Section Card */}
                 {currentUser ? (
                   <motion.div
